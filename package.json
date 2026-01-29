@@ -2,26 +2,32 @@
   "name": "hopecoin",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "type": "module",
+  "main": "dist/main.js",
   "scripts": {
-    "prestart": "npm run compile",
-    "start": "node src/main.ts",
-    "compile": "tsc",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "dev": "node --loader ts-node/esm src/main.ts",
     "test": "node test.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module",
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@types/body-parser": "^1.19.6",
     "@types/crypto-js": "^4.2.2",
+    "@types/express": "^5.0.6",
+    "@types/ws": "^8.18.1",
     "eslint": "^9.39.2",
     "globals": "^17.2.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.54.0"
+    "typescript-eslint": "^8.54.0",
+    "ts-node": "^10.9.2"
   },
   "dependencies": {
-    "crypto-js": "^4.2.0"
+    "crypto-js": "^4.2.0",
+    "express": "^5.2.1",
+    "ws": "^8.19.0"
   }
 }

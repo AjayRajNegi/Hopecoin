@@ -1,24 +1,25 @@
 import CryptoJS from "crypto-js";
+import { broadcastLatest } from "./p2p.js";
 
 class Block {
   public index: number;
   public hash: string;
   public previousHash: string;
-  public timeStamp: number;
+  public timestamp: number;
   public data: string;
 
   constructor(
     index: number,
     hash: string,
     previousHash: string,
-    timeStamp: number,
+    timestamp: number,
     data: string,
   ) {
     this.index = index;
-    this.hash = hash;
     this.previousHash = previousHash;
-    this.timeStamp = timeStamp;
+    this.timestamp = timestamp;
     this.data = data;
+    this.hash = hash;
   }
 }
 
@@ -33,46 +34,45 @@ const genesisBlock: Block = new Block(
 let blockchain: Block[] = [genesisBlock];
 
 const getBlockchain = (): Block[] => blockchain;
+
 const getLatestBlock = (): Block => blockchain[blockchain.length - 1];
 
 const generateNextBlock = (blockData: string) => {
   const previousBlock: Block = getLatestBlock();
   const nextIndex: number = previousBlock.index + 1;
-  const nextTimeStamp: number = new Date().getTime() / 1000;
-
+  const nextTimestamp: number = new Date().getTime() / 1000;
   const nextHash: string = calculateHash(
     nextIndex,
     previousBlock.hash,
-    nextTimeStamp,
+    nextTimestamp,
     blockData,
   );
   const newBlock: Block = new Block(
     nextIndex,
     nextHash,
     previousBlock.hash,
-    nextTimeStamp,
+    nextTimestamp,
     blockData,
   );
-
   addBlock(newBlock);
-  //broadcastLatest()
+  broadcastLatest();
   return newBlock;
 };
 
 const calculateHashForBlock = (block: Block): string =>
-  calculateHash(block.index, block.previousHash, block.timeStamp, block.data);
+  calculateHash(block.index, block.previousHash, block.timestamp, block.data);
 
 const calculateHash = (
   index: number,
   previousHash: string,
-  timeStamp: number,
+  timestamp: number,
   data: string,
 ): string =>
-  CryptoJS.SHA256(index + previousHash + timeStamp + data).toString();
+  CryptoJS.SHA256(index + previousHash + timestamp + data).toString();
 
-const addBlock = (block: Block) => {
-  if (isValidNewBlock(block, getLatestBlock())) {
-    blockchain.push(block);
+const addBlock = (newBlock: Block) => {
+  if (isValidNewBlock(newBlock, getLatestBlock())) {
+    blockchain.push(newBlock);
   }
 };
 
@@ -81,21 +81,21 @@ const isValidBlockStructure = (block: Block): boolean => {
     typeof block.index === "number" &&
     typeof block.hash === "string" &&
     typeof block.previousHash === "string" &&
-    typeof block.timeStamp === "number" &&
+    typeof block.timestamp === "number" &&
     typeof block.data === "string"
   );
 };
 
 const isValidNewBlock = (newBlock: Block, previousBlock: Block): boolean => {
   if (!isValidBlockStructure(newBlock)) {
-    console.log("Is invalid newBlock structure.");
+    console.log("invalid structure");
     return false;
   }
-  if (newBlock.index !== previousBlock.index + 1) {
-    console.log("Is invalid newBlock.");
+  if (previousBlock.index + 1 !== newBlock.index) {
+    console.log("invalid index");
     return false;
-  } else if (newBlock.previousHash !== previousBlock.hash) {
-    console.log("Is invalid newBlock.");
+  } else if (previousBlock.hash !== newBlock.previousHash) {
+    console.log("invalid previoushash");
     return false;
   } else if (calculateHashForBlock(newBlock) !== newBlock.hash) {
     console.log(
@@ -128,4 +128,32 @@ const isValidChain = (blockchainToValidate: Block[]): boolean => {
   return true;
 };
 
-export default calculateHash;
+const addBlockToChain = (newBlock: Block) => {
+  if (isValidNewBlock(newBlock, getLatestBlock())) {
+    blockchain.push(newBlock);
+    return true;
+  }
+  return false;
+};
+
+const replaceChain = (newBlocks: Block[]) => {
+  if (isValidChain(newBlocks) && newBlocks.length > getBlockchain().length) {
+    console.log(
+      "Received blockchain is valid. Replacing current blockchain with received blockchain",
+    );
+    blockchain = newBlocks;
+    broadcastLatest();
+  } else {
+    console.log("Received blockchain invalid");
+  }
+};
+
+export {
+  Block,
+  getBlockchain,
+  getLatestBlock,
+  generateNextBlock,
+  isValidBlockStructure,
+  replaceChain,
+  addBlockToChain,
+};
