@@ -109,4 +109,23 @@ const isValidNewBlock = (newBlock: Block, previousBlock: Block): boolean => {
   return true;
 };
 
+const isValidChain = (blockchainToValidate: Block[]): boolean => {
+  const isValidGenesis = (block: Block): boolean => {
+    return JSON.stringify(block) === JSON.stringify(genesisBlock);
+  };
+
+  if (!isValidGenesis(blockchainToValidate[0])) {
+    return false;
+  }
+
+  for (let i = 1; i < blockchainToValidate.length; i++) {
+    if (
+      !isValidNewBlock(blockchainToValidate[i], blockchainToValidate[i - 1])
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
 export default calculateHash;
