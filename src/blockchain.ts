@@ -1,5 +1,6 @@
 import CryptoJS from "crypto-js";
 import { broadcastLatest } from "./p2p.js";
+import { hexToBinary } from "./util.js";
 
 class Block {
   public index: number;
@@ -7,6 +8,8 @@ class Block {
   public previousHash: string;
   public timestamp: number;
   public data: string;
+  public difficulty: number;
+  public nonce: number;
 
   constructor(
     index: number,
@@ -14,12 +17,16 @@ class Block {
     previousHash: string,
     timestamp: number,
     data: string,
+    difficulty: number,
+    nonce: number,
   ) {
     this.index = index;
     this.previousHash = previousHash;
     this.timestamp = timestamp;
     this.data = data;
     this.hash = hash;
+    this.difficulty = difficulty;
+    this.nonce = nonce;
   }
 }
 
@@ -29,9 +36,12 @@ const genesisBlock: Block = new Block(
   "",
   1465154705,
   "my genesis block!!",
+  0,
+  0,
 );
 
 let blockchain: Block[] = [genesisBlock];
+const DIFFICULTY_ADJUSTMENT_INTERVAL: number = 10;
 
 const getBlockchain = (): Block[] => blockchain;
 
@@ -59,16 +69,59 @@ const generateNextBlock = (blockData: string) => {
   return newBlock;
 };
 
+const findBlock = (
+  index: number,
+  previousHash: string,
+  timestamp: number,
+  data: string,
+  difficulty: number,
+): Block => {
+  let nonce = 0;
+  while (true) {
+    const hash: string = calculateHash(
+      index,
+      previousHash,
+      timestamp,
+      data,
+      difficulty,
+      nonce,
+    );
+    if (hashMatchesDifficulty(hash, difficulty)) {
+      return new Block(
+        index,
+        hash,
+        previousHash,
+        timestamp,
+        data,
+        difficulty,
+        nonce,
+      );
+    }
+    nonce++;
+  }
+};
+
 const calculateHashForBlock = (block: Block): string =>
-  calculateHash(block.index, block.previousHash, block.timestamp, block.data);
+  calculateHash(
+    block.index,
+    block.previousHash,
+    block.timestamp,
+    block.data,
+    block.difficulty,
+    block.nonce,
+  );
 
 const calculateHash = (
   index: number,
   previousHash: string,
   timestamp: number,
   data: string,
+  difficulty: number,
+  nonce: number,
 ): string =>
-  CryptoJS.SHA256(index + previousHash + timestamp + data).toString();
+  CryptoJS.SHA256(
+    index + previousHash + timestamp + data + difficulty + nonce,
+  ).toString();
 
 const addBlock = (newBlock: Block) => {
   if (isValidNewBlock(newBlock, getLatestBlock())) {
@@ -107,6 +160,12 @@ const isValidNewBlock = (newBlock: Block, previousBlock: Block): boolean => {
     return false;
   }
   return true;
+};
+
+const hashMatchesDifficulty = (hash: string, difficulty: number): boolean => {
+  const hashInBinary = hexToBinary(hash);
+  const requiredPrefix = "0".repeat(difficulty);
+  return hashInBinary.startsWith(requiredPrefix);
 };
 
 const isValidChain = (blockchainToValidate: Block[]): boolean => {
