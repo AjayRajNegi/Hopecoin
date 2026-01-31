@@ -1,6 +1,6 @@
 import CryptoJS from "crypto-js";
-import { broadcastLatest } from "./p2p.js";
-import { hexToBinary } from "./util.js";
+import { broadcastLatest } from "./p2p";
+import { hexToBinary } from "./util";
 
 class Block {
   public index: number;
@@ -32,7 +32,7 @@ class Block {
 
 const genesisBlock: Block = new Block(
   0,
-  "816534932c2b7154836da6afc367695e6337db8a921823784c14378abed4f7d7",
+  "91a73664bc84c0baa1fc75ea6e4aa6d1d20c5df664c724e3159aefc2e1186627",
   "",
   1465154705,
   "my genesis block!!",
@@ -45,8 +45,10 @@ let blockchain: Block[] = [genesisBlock];
 const getBlockchain = (): Block[] => blockchain;
 
 const getLatestBlock = (): Block => blockchain[blockchain.length - 1];
+
 // in seconds
 const BLOCK_GENERATION_INTERVAL: number = 10;
+
 // in blocks
 const DIFFICULTY_ADJUSTMENT_INTERVAL: number = 10;
 
@@ -62,18 +64,14 @@ const getDifficulty = (aBlockchain: Block[]): number => {
   }
 };
 
-const getAdjustedDifficulty = (
-  latestBlock: Block,
-  aBlockchain: Block[],
-): number => {
+const getAdjustedDifficulty = (latestBlock: Block, aBlockchain: Block[]) => {
   const prevAdjustmentBlock: Block =
     aBlockchain[blockchain.length - DIFFICULTY_ADJUSTMENT_INTERVAL];
   const timeExpected: number =
     BLOCK_GENERATION_INTERVAL * DIFFICULTY_ADJUSTMENT_INTERVAL;
   const timeTaken: number =
     latestBlock.timestamp - prevAdjustmentBlock.timestamp;
-
-  if (timeTaken < timeExpected * 2) {
+  if (timeTaken < timeExpected / 2) {
     return prevAdjustmentBlock.difficulty + 1;
   } else if (timeTaken > timeExpected * 2) {
     return prevAdjustmentBlock.difficulty - 1;
@@ -184,21 +182,54 @@ const isValidNewBlock = (newBlock: Block, previousBlock: Block): boolean => {
   } else if (previousBlock.hash !== newBlock.previousHash) {
     console.log("invalid previoushash");
     return false;
-  } else if (calculateHashForBlock(newBlock) !== newBlock.hash) {
-    console.log(
-      typeof newBlock.hash + " " + typeof calculateHashForBlock(newBlock),
-    );
-    console.log(
-      "invalid hash: " + calculateHashForBlock(newBlock) + " " + newBlock.hash,
-    );
+  } else if (!isValidTimestamp(newBlock, previousBlock)) {
+    console.log("invalid timestamp");
+    return false;
+  } else if (!hasValidHash(newBlock)) {
     return false;
   }
   return true;
 };
 
+const getAccumulatedDifficulty = (aBlockchain: Block[]): number => {
+  return aBlockchain
+    .map((block) => block.difficulty)
+    .map((difficulty) => Math.pow(2, difficulty))
+    .reduce((a, b) => a + b);
+};
+
+const isValidTimestamp = (newBlock: Block, previousBlock: Block): boolean => {
+  return (
+    previousBlock.timestamp - 60 < newBlock.timestamp &&
+    newBlock.timestamp - 60 < getCurrentTimestamp()
+  );
+};
+
+const hasValidHash = (block: Block): boolean => {
+  if (!hashMatchesBlockContent(block)) {
+    console.log("invalid hash, got:" + block.hash);
+    return false;
+  }
+
+  if (!hashMatchesDifficulty(block.hash, block.difficulty)) {
+    console.log(
+      "block difficulty not satisfied. Expected: " +
+        block.difficulty +
+        "got: " +
+        block.hash,
+    );
+  }
+  return true;
+};
+
+const hashMatchesBlockContent = (block: Block): boolean => {
+  const blockHash: string = calculateHashForBlock(block);
+  return blockHash === block.hash;
+};
+
 const hashMatchesDifficulty = (hash: string, difficulty: number): boolean => {
-  const hashInBinary = hexToBinary(hash);
-  const requiredPrefix = "0".repeat(difficulty);
+  const hashInBinary: string = hexToBinary(hash);
+  const requiredPrefix: string = "0".repeat(difficulty);
   return hashInBinary.startsWith(requiredPrefix);
 };
 
@@ -230,7 +261,11 @@ const addBlockToChain = (newBlock: Block) => {
 };
 
 const replaceChain = (newBlocks: Block[]) => {
-  if (isValidChain(newBlocks) && newBlocks.length > getBlockchain().length) {
+  if (
+    isValidChain(newBlocks) &&
+    getAccumulatedDifficulty(newBlocks) >
+      getAccumulatedDifficulty(getBlockchain())
+  ) {
     console.log(
       "Received blockchain is valid. Replacing current blockchain with received blockchain",
     );
