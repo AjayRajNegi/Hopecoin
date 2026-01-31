@@ -41,28 +41,62 @@ const genesisBlock: Block = new Block(
 );
 
 let blockchain: Block[] = [genesisBlock];
-const DIFFICULTY_ADJUSTMENT_INTERVAL: number = 10;
 
 const getBlockchain = (): Block[] => blockchain;
 
 const getLatestBlock = (): Block => blockchain[blockchain.length - 1];
+// in seconds
+const BLOCK_GENERATION_INTERVAL: number = 10;
+// in blocks
+const DIFFICULTY_ADJUSTMENT_INTERVAL: number = 10;
+
+const getDifficulty = (aBlockchain: Block[]): number => {
+  const latestBlock: Block = aBlockchain[blockchain.length - 1];
+  if (
+    latestBlock.index % DIFFICULTY_ADJUSTMENT_INTERVAL === 0 &&
+    latestBlock.index !== 0
+  ) {
+    return getAdjustedDifficulty(latestBlock, aBlockchain);
+  } else {
+    return latestBlock.difficulty;
+  }
+};
+
+const getAdjustedDifficulty = (
+  latestBlock: Block,
+  aBlockchain: Block[],
+): number => {
+  const prevAdjustmentBlock: Block =
+    aBlockchain[blockchain.length - DIFFICULTY_ADJUSTMENT_INTERVAL];
+  const timeExpected: number =
+    BLOCK_GENERATION_INTERVAL * DIFFICULTY_ADJUSTMENT_INTERVAL;
+  const timeTaken: number =
+    latestBlock.timestamp - prevAdjustmentBlock.timestamp;
+
+  if (timeTaken < timeExpected * 2) {
+    return prevAdjustmentBlock.difficulty + 1;
+  } else if (timeTaken > timeExpected * 2) {
+    return prevAdjustmentBlock.difficulty - 1;
+  } else {
+    return prevAdjustmentBlock.difficulty;
+  }
+};
+
+const getCurrentTimestamp = (): number =>
+  Math.round(new Date().getTime() / 1000);
 
 const generateNextBlock = (blockData: string) => {
   const previousBlock: Block = getLatestBlock();
+  const difficulty: number = getDifficulty(getBlockchain());
+  console.log("difficulty: " + difficulty);
   const nextIndex: number = previousBlock.index + 1;
-  const nextTimestamp: number = new Date().getTime() / 1000;
-  const nextHash: string = calculateHash(
+  const nextTimestamp: number = getCurrentTimestamp();
+  const newBlock: Block = findBlock(
     nextIndex,
     previousBlock.hash,
     nextTimestamp,
     blockData,
-  );
-  const newBlock: Block = new Block(
-    nextIndex,
-    nextHash,
-    previousBlock.hash,
-    nextTimestamp,
-    blockData,
+    difficulty,
   );
   addBlock(newBlock);
   broadcastLatest();
