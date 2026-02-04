@@ -1,5 +1,6 @@
 import CryptoJS from "crypto-js";
 import { broadcastLatest } from "./p2p";
+import { UnspentTxOut, Transaction, processTransactions } from "./transactions";
 import { hexToBinary } from "./util";
 
 class Block {
@@ -7,7 +8,7 @@ class Block {
   public hash: string;
   public previousHash: string;
   public timestamp: number;
-  public data: string;
+  public data: Transaction[];
   public difficulty: number;
   public nonce: number;
 
@@ -16,7 +17,7 @@ class Block {
     hash: string,
     previousHash: string,
     timestamp: number,
-    data: string,
+    data: Transaction[],
     difficulty: number,
     nonce: number,
   ) {
@@ -35,12 +36,14 @@ const genesisBlock: Block = new Block(
   "91a73664bc84c0baa1fc75ea6e4aa6d1d20c5df664c724e3159aefc2e1186627",
   "",
   1465154705,
-  "my genesis block!!",
+  [],
   0,
   0,
 );
 
 let blockchain: Block[] = [genesisBlock];
+
+let unspentTxOuts: UnspentTxOut[] = [];
 
 const getBlockchain = (): Block[] => blockchain;
 
@@ -83,10 +86,9 @@ const getAdjustedDifficulty = (latestBlock: Block, aBlockchain: Block[]) => {
 const getCurrentTimestamp = (): number =>
   Math.round(new Date().getTime() / 1000);
 
-const generateNextBlock = (blockData: string) => {
+const generateNextBlock = (blockData: Transaction[]) => {
   const previousBlock: Block = getLatestBlock();
   const difficulty: number = getDifficulty(getBlockchain());
-  console.log("difficulty: " + difficulty);
   const nextIndex: number = previousBlock.index + 1;
   const nextTimestamp: number = getCurrentTimestamp();
   const newBlock: Block = findBlock(
@@ -96,16 +98,19 @@ const generateNextBlock = (blockData: string) => {
     blockData,
     difficulty,
   );
-  addBlock(newBlock);
-  broadcastLatest();
-  return newBlock;
+  if (addBlockToChain(newBlock)) {
+    broadcastLatest();
+    return newBlock;
+  } else {
+    return null;
+  }
 };
 
 const findBlock = (
   index: number,
   previousHash: string,
   timestamp: number,
-  data: string,
+  data: Transaction[],
   difficulty: number,
 ): Block => {
   let nonce = 0;
@@ -147,7 +152,7 @@ const calculateHash = (
   index: number,
   previousHash: string,
   timestamp: number,
-  data: string,
+  data: Transaction[],
   difficulty: number,
   nonce: number,
 ): string =>
@@ -155,25 +160,20 @@ const calculateHash = (
     index + previousHash + timestamp + data + difficulty + nonce,
   ).toString();
 
-const addBlock = (newBlock: Block) => {
-  if (isValidNewBlock(newBlock, getLatestBlock())) {
-    blockchain.push(newBlock);
-  }
-};
-
 const isValidBlockStructure = (block: Block): boolean => {
   return (
     typeof block.index === "number" &&
     typeof block.hash === "string" &&
     typeof block.previousHash === "string" &&
     typeof block.timestamp === "number" &&
-    typeof block.data === "string"
+    typeof block.data === "object"
   );
 };
 
 const isValidNewBlock = (newBlock: Block, previousBlock: Block): boolean => {
   if (!isValidBlockStructure(newBlock)) {
-    console.log("invalid structure");
+    console.log("invalid block structure");
+    console.log(newBlock);
     return false;
   }
   if (previousBlock.index + 1 !== newBlock.index) {
@@ -252,10 +252,20 @@ const isValidChain = (blockchainToValidate: Block[]): boolean => {
   return true;
 };
 
-const addBlockToChain = (newBlock: Block) => {
+const addBlockToChain = (newBlock: Block): boolean => {
   if (isValidNewBlock(newBlock, getLatestBlock())) {
-    blockchain.push(newBlock);
-    return true;
+    const retVal: UnspentTxOut[] = processTransactions(
+      newBlock.data,
+      unspentTxOuts,
+      newBlock.index,
+    );
+    if (retVal === null) {
+      return false;
+    } else {
+      blockchain.push(newBlock);
+      unspentTxOuts = retVal;
+      return true;
+    }
   }
   return false;
 };
