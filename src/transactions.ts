@@ -1,7 +1,6 @@
 import CryptoJS from "crypto-js";
 import ecdsa from "elliptic";
 import _ from "lodash";
-
 const ec = new ecdsa.ec("secp256k1");
 
 const COINBASE_AMOUNT: number = 50;
@@ -106,7 +105,7 @@ const validateBlockTransactions = (
     return false;
   }
 
-  //check for duplicate txIns. Each txIn can be included only once
+  // check for duplicate txIns. Each txIn can be included only once
   const txIns: TxIn[] = _(aTransactions)
     .map((tx) => tx.txIns)
     .flatten()
@@ -124,7 +123,10 @@ const validateBlockTransactions = (
 };
 
 const hasDuplicates = (txIns: TxIn[]): boolean => {
-  const groups = _.countBy(txIns, (txIn) => txIn.txOutId + txIn.txOutId);
+  const groups = _.countBy(
+    txIns,
+    (txIn: TxIn) => txIn.txOutId + txIn.txOutIndex,
+  );
   return _(groups)
     .map((value, key) => {
       if (value > 1) {
@@ -153,7 +155,7 @@ const validateCoinbaseTx = (
   }
   if (transaction.txIns.length !== 1) {
     console.log("one txIn must be specified in the coinbase transaction");
-    return false;
+    return;
   }
   if (transaction.txIns[0].txOutIndex !== blockIndex) {
     console.log("the txIn signature in coinbase tx must be the block height");
@@ -163,7 +165,7 @@ const validateCoinbaseTx = (
     console.log("invalid number of txOuts in coinbase transaction");
     return false;
   }
-  if (transaction.txOuts[0].amount != COINBASE_AMOUNT) {
+  if (transaction.txOuts[0].amount !== COINBASE_AMOUNT) {
     console.log("invalid coinbase amount in coinbase transaction");
     return false;
   }
@@ -176,7 +178,8 @@ const validateTxIn = (
   aUnspentTxOuts: UnspentTxOut[],
 ): boolean => {
   const referencedUTxOut: UnspentTxOut = aUnspentTxOuts.find(
-    (uTxO) => uTxO.txOutId === txIn.txOutId && uTxO.txOutId === txIn.txOutId,
+    (uTxO) =>
+      uTxO.txOutId === txIn.txOutId && uTxO.txOutIndex === txIn.txOutIndex,
   );
   if (referencedUTxOut == null) {
     console.log("referenced txOut not found: " + JSON.stringify(txIn));
@@ -185,7 +188,17 @@ const validateTxIn = (
   const address = referencedUTxOut.address;
 
   const key = ec.keyFromPublic(address, "hex");
-  return key.verify(transaction.id, txIn.signature);
+  const validSignature: boolean = key.verify(transaction.id, txIn.signature);
+  if (!validSignature) {
+    console.log(
+      "invalid txIn signature: %s txId: %s address: %s",
+      txIn.signature,
+      transaction.id,
+      referencedUTxOut.address,
+    );
+    return false;
+  }
+  return true;
 };
 
 const getTxInAmount = (txIn: TxIn, aUnspentTxOuts: UnspentTxOut[]): number => {
@@ -252,10 +265,10 @@ const signTxIn = (
 };
 
 const updateUnspentTxOuts = (
-  newTransactions: Transaction[],
+  aTransactions: Transaction[],
   aUnspentTxOuts: UnspentTxOut[],
 ): UnspentTxOut[] => {
-  const newUnspentTxOuts: UnspentTxOut[] = newTransactions
+  const newUnspentTxOuts: UnspentTxOut[] = aTransactions
     .map((t) => {
       return t.txOuts.map(
         (txOut, index) =>
@@ -264,7 +277,7 @@ const updateUnspentTxOuts = (
     })
     .reduce((a, b) => a.concat(b), []);
 
-  const consumedTxOuts: UnspentTxOut[] = newTransactions
+  const consumedTxOuts: UnspentTxOut[] = aTransactions
     .map((t) => t.txIns)
     .reduce((a, b) => a.concat(b), [])
     .map((txIn) => new UnspentTxOut(txIn.txOutId, txIn.txOutIndex, "", 0));
@@ -295,14 +308,14 @@ const processTransactions = (
   return updateUnspentTxOuts(aTransactions, aUnspentTxOuts);
 };
 
-const toHexString = (byteArray: any): string => {
+const toHexString = (byteArray): string => {
   return Array.from(byteArray, (byte: any) => {
     return ("0" + (byte & 0xff).toString(16)).slice(-2);
   }).join("");
 };
 
 const getPublicKey = (aPrivateKey: string): string => {
-  return ec.keyFromPrivate(aPrivateKey, "hex").getPublic().encode("hex");
+  return ec.keyFromPrivate(aPrivateKey, "hex").getPublic().encode("hex", false);
 };
 
 const isValidTxInStructure = (txIn: TxIn): boolean => {
@@ -377,7 +390,7 @@ const isValidTransactionStructure = (transaction: Transaction) => {
   return true;
 };
 
-//valid address is a valid ecdsa public key in the 04 + X-coordinate + Y-coordinate format
+// valid address is a valid ecdsa public key in the 04 + X-coordinate + Y-coordinate format
 const isValidAddress = (address: string): boolean => {
   if (address.length !== 130) {
     console.log("invalid public key length");
@@ -396,6 +409,7 @@ export {
   processTransactions,
   signTxIn,
   getTransactionId,
+  isValidAddress,
   UnspentTxOut,
   TxIn,
   TxOut,
